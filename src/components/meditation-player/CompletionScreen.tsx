@@ -36,10 +36,6 @@ export function CompletionScreen({ session, mood, onComplete }: CompletionScreen
             {mood.icon} {mood.label}
           </span>
         </div>
-        <div className="flex items-center justify-between py-3 border-b border-slate-800">
-          <span className="text-xs uppercase tracking-widest text-slate-500">Soundscape</span>
-          <span className="text-sm text-slate-200">{session.soundscape}</span>
-        </div>
       </div>
 
       {/* Done button */}

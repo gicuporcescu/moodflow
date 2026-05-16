@@ -41,3 +41,9 @@ yarn-error.log*
 next-env.d.ts
 
 /src/generated/prisma
+/.idea/jsLibraryMappings.xml
+/.idea/modules.xml
+/.idea/moodflow.iml
+/.idea/php.xml
+/.idea/vcs.xml
+/.idea/workspace.xml

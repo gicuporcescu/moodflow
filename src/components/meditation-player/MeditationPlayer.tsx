@@ -76,9 +76,6 @@ export function MeditationPlayer({
       {/* Top bar: session info + end */}
       <div className="relative w-full flex items-center justify-between">
         <div>
-          <p className="text-xs text-slate-500 uppercase tracking-widest">
-            {activeSession.type}
-          </p>
           <p className="text-sm text-slate-300 mt-0.5">{activeSession.title}</p>
         </div>
         <button
@@ -130,9 +127,6 @@ export function MeditationPlayer({
                 onChange={(e) => setVolume(Number(e.target.value))}
                 className="w-24 h-1 accent-teal-500 [&::-webkit-slider-thumb]:bg-teal-400 [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3"
               />
-              <p className="text-[10px] text-slate-500 text-center mt-1">
-                {activeSession.soundscape}
-              </p>
             </div>
           )}
         </div>
