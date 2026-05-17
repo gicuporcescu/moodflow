@@ -12,10 +12,19 @@ const activeSession: ActiveSession = {
   selectedGuidance: 'light',
 }
 
-const mood: Mood = { id: 'mood-anxious', label: 'Anxious', icon: '🌊' }
+const mood: Mood = {
+  id: 'mood-anxious',
+  label: 'Anxious',
+  icon: '🌊',
+  audioFile: '/audio/anxious.mp3',
+}
 
 describe('MeditationPlayer', () => {
   beforeEach(() => {
+    // jsdom doesn't implement HTMLMediaElement playback — stub so the
+    // player's audio wiring doesn't blow up unrelated tests.
+    HTMLMediaElement.prototype.play = vi.fn(() => Promise.resolve())
+    HTMLMediaElement.prototype.pause = vi.fn()
     vi.useFakeTimers()
   })
 
@@ -115,6 +124,14 @@ describe('MeditationPlayer', () => {
     expect(screen.getByText('1 min')).toBeInTheDocument()
     expect(screen.getByText('🌊 Anxious')).toBeInTheDocument()
     expect(screen.getByText('Rain')).toBeInTheDocument()
+  })
+
+  it('renders an audio element with src derived from mood.audioFile', () => {
+    const { container } = render(<MeditationPlayer activeSession={activeSession} mood={mood} />)
+    const audio = container.querySelector('audio')
+    expect(audio).not.toBeNull()
+    expect(audio?.getAttribute('src')).toBe('/audio/anxious.mp3')
+    expect(audio?.hasAttribute('loop')).toBe(true)
   })
 
   it('calls onComplete when Done is clicked on completion screen', () => {

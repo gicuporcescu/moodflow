@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import MeditationPlayerClient from '@/components/meditation-player/MeditationPlayerClient'
-import type { ActiveSession, Mood, GuidanceLevel, Duration } from '@/lib/types'
+import type { ActiveSession, GuidanceLevel, Duration } from '@/lib/types'
 import {moods} from "@/lib/masterdata";
 
 interface Props {
@@ -33,12 +33,5 @@ export default async function PlayPage({ searchParams }: Props) {
     selectedGuidance: guidance as GuidanceLevel,
   }
 
-
-  const mood: Mood = {
-    id: moodId,
-    label: moodRow.label,
-    icon: moodRow.icon,
-  }
-
-  return <MeditationPlayerClient activeSession={activeSession} mood={mood} />
+  return <MeditationPlayerClient activeSession={activeSession} mood={moodRow} />
 }

@@ -12,6 +12,7 @@ export interface Mood {
   id: string
   label: string
   icon: string
+  audioFile?: string
 }
 
 export interface Session {

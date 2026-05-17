@@ -18,6 +18,8 @@ export default function MeditationPlayerClient({ activeSession, mood }: Meditati
     router.push('/mood')
   }
 
+  console.log('Rendering MeditationPlayerClient with session:', activeSession, 'and mood:', mood)
+
   return (
     <MeditationPlayer
       activeSession={activeSession}
