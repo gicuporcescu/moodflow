@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { DM_Sans, IBM_Plex_Mono } from 'next/font/google'
 import './globals.css'
+import { InstallPrompt } from '@/components/install-prompt'
 
 const dmSans = DM_Sans({
   variable: '--font-dm-sans',
@@ -27,6 +28,7 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${dmSans.variable} ${ibmPlexMono.variable} font-sans antialiased`}>
         {children}
+        <InstallPrompt />
       </body>
     </html>
   )
