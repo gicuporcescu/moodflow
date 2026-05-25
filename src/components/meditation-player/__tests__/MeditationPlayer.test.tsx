@@ -6,8 +6,6 @@ import type { ActiveSession, Mood } from '@/lib/types'
 const activeSession: ActiveSession = {
   id: 'session-001',
   title: 'Letting Go',
-  type: 'body scan',
-  soundscape: 'Rain',
   selectedDuration: 1, // 1 minute for quick testing
   selectedGuidance: 'light',
 }
@@ -32,10 +30,9 @@ describe('MeditationPlayer', () => {
     vi.useRealTimers()
   })
 
-  it('renders session title and type', () => {
+  it('renders session title', () => {
     render(<MeditationPlayer activeSession={activeSession} mood={mood} />)
     expect(screen.getByText('Letting Go')).toBeInTheDocument()
-    expect(screen.getByText('body scan')).toBeInTheDocument()
   })
 
   it('displays initial timer value', () => {
@@ -123,7 +120,6 @@ describe('MeditationPlayer', () => {
     expect(screen.getByText('Letting Go')).toBeInTheDocument()
     expect(screen.getByText('1 min')).toBeInTheDocument()
     expect(screen.getByText('🌊 Anxious')).toBeInTheDocument()
-    expect(screen.getByText('Rain')).toBeInTheDocument()
   })
 
   it('renders an audio element with src derived from mood.audioFile', () => {
