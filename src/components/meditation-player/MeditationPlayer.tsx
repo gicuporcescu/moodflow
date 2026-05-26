@@ -40,7 +40,7 @@ export function MeditationPlayer({
   const totalSeconds = activeSession.selectedDuration * 60
   const [secondsLeft, setSecondsLeft] = useState(totalSeconds)
   const [isPlaying, setIsPlaying] = useState(true)
-  const [volume, setVolume] = useState(0.7)
+  const [volume, setVolume] = useState(0.3)
   const [showVolume, setShowVolume] = useState(false)
   const [isComplete, setIsComplete] = useState(false)
   // Triggers the play effect once the decoded buffer is available.
