@@ -18,32 +18,16 @@ const FADE_PLAY_MS = 400
 const FADE_PAUSE_MS = 400
 const FADE_SLIDER_MS = 200
 const FADE_COMPLETE_MS = 1500
-const RAMP_STEP_MS = 16
 
-function rampVolume(
-  el: HTMLAudioElement,
-  to: number,
-  ms: number,
-  cancel: { id: number | null },
-) {
-  if (cancel.id !== null) {
-    window.clearInterval(cancel.id)
-    cancel.id = null
+function rampGain(gain: GainNode, ctx: AudioContext, to: number, ms: number) {
+  const now = ctx.currentTime
+  gain.gain.cancelScheduledValues(now)
+  gain.gain.setValueAtTime(gain.gain.value, now)
+  if (ms <= 0) {
+    gain.gain.setValueAtTime(to, now)
+  } else {
+    gain.gain.linearRampToValueAtTime(to, now + ms / 1000)
   }
-  const from = el.volume
-  if (ms <= 0 || from === to) {
-    el.volume = to
-    return
-  }
-  const start = performance.now()
-  cancel.id = window.setInterval(() => {
-    const t = Math.min(1, (performance.now() - start) / ms)
-    el.volume = from + (to - from) * t
-    if (t >= 1 && cancel.id !== null) {
-      window.clearInterval(cancel.id)
-      cancel.id = null
-    }
-  }, RAMP_STEP_MS)
 }
 
 export function MeditationPlayer({
@@ -59,9 +43,17 @@ export function MeditationPlayer({
   const [volume, setVolume] = useState(0.7)
   const [showVolume, setShowVolume] = useState(false)
   const [isComplete, setIsComplete] = useState(false)
+  // Triggers the play effect once the decoded buffer is available.
+  const [bufferReady, setBufferReady] = useState(false)
+
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const audioRef = useRef<HTMLAudioElement | null>(null)
-  const fadeCancelRef = useRef<{ id: number | null }>({ id: null })
+  const audioCtxRef = useRef<AudioContext | null>(null)
+  const gainNodeRef = useRef<GainNode | null>(null)
+  const sourceNodeRef = useRef<AudioBufferSourceNode | null>(null)
+  const audioBufferRef = useRef<AudioBuffer | null>(null)
+  // Track playback position so pause/resume is seamless.
+  const playOffsetRef = useRef(0)
+  const playStartCtxTimeRef = useRef(0)
   const pendingPauseRef = useRef<number | null>(null)
   const volumeFirstRunRef = useRef(true)
 
@@ -78,6 +70,44 @@ export function MeditationPlayer({
       pendingPauseRef.current = null
     }
   }, [])
+
+  // Create AudioContext, connect gain, fetch + decode the audio file.
+  useEffect(() => {
+    if (!mood.audioFile) {
+      console.warn(`[MeditationPlayer] no audioFile for mood ${mood.id}; running silent`)
+      return
+    }
+
+    const ctx = new AudioContext()
+    const gain = ctx.createGain()
+    gain.gain.value = 0
+    gain.connect(ctx.destination)
+    audioCtxRef.current = ctx
+    gainNodeRef.current = gain
+
+    fetch(mood.audioFile)
+      .then((r) => r.arrayBuffer())
+      .then((buf) => ctx.decodeAudioData(buf))
+      .then((decoded) => {
+        audioBufferRef.current = decoded
+        setBufferReady(true)
+      })
+      .catch(() => {})
+
+    return () => {
+      setBufferReady(false)
+      clearPendingPause()
+      try {
+        sourceNodeRef.current?.stop()
+      } catch (_) {}
+      sourceNodeRef.current = null
+      audioBufferRef.current = null
+      playOffsetRef.current = 0
+      ctx.close().catch(() => {})
+      audioCtxRef.current = null
+      gainNodeRef.current = null
+    }
+  }, [mood.audioFile, mood.id, clearPendingPause])
 
   useEffect(() => {
     if (isPlaying && secondsLeft > 0) {
@@ -97,68 +127,79 @@ export function MeditationPlayer({
     return stopTimer
   }, [isPlaying, secondsLeft, stopTimer])
 
+  // Play / pause / completion — reruns when buffer arrives (bufferReady).
   useEffect(() => {
-    if (!mood.audioFile) {
-      console.warn(`[MeditationPlayer] no audioFile for mood ${mood.id}; running silent`)
-    }
-  }, [mood.audioFile, mood.id])
+    const ctx = audioCtxRef.current
+    const gain = gainNodeRef.current
+    if (!ctx || !gain) return
 
-  // Mount/unmount only — play & ramp belong to the next effect.
-  useEffect(() => {
-    const el = audioRef.current
-    if (!el) return
-    el.volume = 0
-    const cancel = fadeCancelRef.current
-    return () => {
-      if (cancel.id !== null) {
-        window.clearInterval(cancel.id)
-        cancel.id = null
-      }
-      clearPendingPause()
-      el.pause()
-    }
-  }, [mood.audioFile, clearPendingPause])
-
-  useEffect(() => {
-    const el = audioRef.current
-    if (!el) return
     clearPendingPause()
+
     if (isComplete) {
-      rampVolume(el, 0, FADE_COMPLETE_MS, fadeCancelRef.current)
+      rampGain(gain, ctx, 0, FADE_COMPLETE_MS)
       pendingPauseRef.current = window.setTimeout(() => {
         pendingPauseRef.current = null
-        if (audioRef.current) audioRef.current.pause()
+        try {
+          sourceNodeRef.current?.stop()
+        } catch (_) {}
+        sourceNodeRef.current = null
       }, FADE_COMPLETE_MS + 20)
       return
     }
+
     if (isPlaying) {
-      const playPromise = el.play()
-      if (playPromise && typeof playPromise.catch === 'function') {
-        playPromise.catch(() => {})
-      }
-      rampVolume(el, volume, FADE_PLAY_MS, fadeCancelRef.current)
+      ctx.resume().catch(() => {})
+      const buffer = audioBufferRef.current
+      if (!buffer) return // buffer not loaded yet; bufferReady will re-trigger
+
+      try {
+        sourceNodeRef.current?.stop()
+      } catch (_) {}
+      sourceNodeRef.current = null
+
+      const source = ctx.createBufferSource()
+      source.buffer = buffer
+      source.loop = true // gap-free loop at the sample level
+      source.connect(gain)
+
+      const offset = playOffsetRef.current % buffer.duration
+      source.start(0, offset)
+      playStartCtxTimeRef.current = ctx.currentTime
+      playOffsetRef.current = offset
+      sourceNodeRef.current = source
+
+      rampGain(gain, ctx, volume, FADE_PLAY_MS)
     } else {
-      rampVolume(el, 0, FADE_PAUSE_MS, fadeCancelRef.current)
+      // Snapshot current position before stopping so resume is seamless.
+      const buffer = audioBufferRef.current
+      if (buffer && sourceNodeRef.current) {
+        const elapsed = ctx.currentTime - playStartCtxTimeRef.current
+        playOffsetRef.current = (playOffsetRef.current + elapsed) % buffer.duration
+      }
+
+      rampGain(gain, ctx, 0, FADE_PAUSE_MS)
       pendingPauseRef.current = window.setTimeout(() => {
         pendingPauseRef.current = null
-        if (audioRef.current) audioRef.current.pause()
+        try {
+          sourceNodeRef.current?.stop()
+        } catch (_) {}
+        sourceNodeRef.current = null
       }, FADE_PAUSE_MS + 20)
     }
-    // Slider changes are handled by the dedicated [volume] effect below;
-    // re-running here would double-ramp on every slider tick.
+    // volume excluded intentionally — slider changes are handled by the [volume] effect below
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPlaying, isComplete])
+  }, [isPlaying, isComplete, bufferReady])
 
   useEffect(() => {
     if (volumeFirstRunRef.current) {
       volumeFirstRunRef.current = false
       return
     }
-    const el = audioRef.current
-    if (!el || !isPlaying || isComplete) return
-    rampVolume(el, volume, FADE_SLIDER_MS, fadeCancelRef.current)
-    // isPlaying / isComplete are read defensively but their transitions
-    // are owned by the [isPlaying, isComplete] effect above.
+    const ctx = audioCtxRef.current
+    const gain = gainNodeRef.current
+    if (!ctx || !gain || !isPlaying || isComplete) return
+    rampGain(gain, ctx, volume, FADE_SLIDER_MS)
+    // isPlaying / isComplete are read defensively; their transitions belong to the effect above
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [volume])
 
@@ -174,9 +215,6 @@ export function MeditationPlayer({
 
   return (
     <>
-      {mood.audioFile && (
-        <audio ref={audioRef} src={mood.audioFile} loop preload="auto" />
-      )}
       {isComplete ? (
         <CompletionScreen session={activeSession} mood={mood} onComplete={onComplete} />
       ) : (

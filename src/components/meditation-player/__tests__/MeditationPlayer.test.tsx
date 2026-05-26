@@ -17,16 +17,51 @@ const mood: Mood = {
   audioFile: '/audio/anxious.mp3',
 }
 
+function makeMockGain() {
+  return {
+    gain: {
+      value: 0,
+      cancelScheduledValues: vi.fn(),
+      setValueAtTime: vi.fn(),
+      linearRampToValueAtTime: vi.fn(),
+    },
+    connect: vi.fn(),
+  }
+}
+
+function makeMockAudioCtx() {
+  return {
+    currentTime: 0,
+    destination: {},
+    createGain: vi.fn(() => makeMockGain()),
+    createBufferSource: vi.fn(() => ({
+      buffer: null as AudioBuffer | null,
+      loop: false,
+      connect: vi.fn(),
+      start: vi.fn(),
+      stop: vi.fn(),
+    })),
+    resume: vi.fn(() => Promise.resolve()),
+    close: vi.fn(() => Promise.resolve()),
+    decodeAudioData: vi.fn(() => Promise.resolve({ duration: 120 } as AudioBuffer)),
+  }
+}
+
 describe('MeditationPlayer', () => {
   beforeEach(() => {
-    // jsdom doesn't implement HTMLMediaElement playback — stub so the
-    // player's audio wiring doesn't blow up unrelated tests.
-    HTMLMediaElement.prototype.play = vi.fn(() => Promise.resolve())
-    HTMLMediaElement.prototype.pause = vi.fn()
+    // Mock Web Audio API — jsdom doesn't implement it.
+    // Must use a regular function (not an arrow) so `new AudioContext()` works.
+    vi.stubGlobal('AudioContext', vi.fn(function () { return makeMockAudioCtx() }))
+    global.fetch = vi.fn(() =>
+      Promise.resolve({
+        arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
+      } as unknown as Response),
+    )
     vi.useFakeTimers()
   })
 
   afterEach(() => {
+    vi.unstubAllGlobals()
     vi.useRealTimers()
   })
 
@@ -122,12 +157,10 @@ describe('MeditationPlayer', () => {
     expect(screen.getByText('🌊 Anxious')).toBeInTheDocument()
   })
 
-  it('renders an audio element with src derived from mood.audioFile', () => {
+  it('uses Web Audio API instead of an HTML audio element', () => {
     const { container } = render(<MeditationPlayer activeSession={activeSession} mood={mood} />)
-    const audio = container.querySelector('audio')
-    expect(audio).not.toBeNull()
-    expect(audio?.getAttribute('src')).toBe('/audio/anxious.mp3')
-    expect(audio?.hasAttribute('loop')).toBe(true)
+    expect(container.querySelector('audio')).toBeNull()
+    expect(AudioContext).toHaveBeenCalled()
   })
 
   it('calls onComplete when Done is clicked on completion screen', () => {
